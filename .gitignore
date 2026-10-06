@@ -1,0 +1,17 @@
+# Large k-Wave HDF5 simulation datasets
+*.h5
+*.hdf5
+
+# Python runtime artifacts
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+
+# OS hidden files
+.DS_Store
+Thumbs.db
