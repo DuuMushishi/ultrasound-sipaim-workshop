@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import hilbert, windows, butter, filtfilt
 
-# ==============================================================================
+# %%==============================================================================
 # 1. LOAD DATA
 # ==============================================================================
 h5_filename = Path("sipaim_focused_ultrasound_rf.h5")
@@ -24,7 +24,7 @@ f0 = 5e6  # 5 MHz center frequency
 
 Nx, Ny = density_map.shape
 
-# ==============================================================================
+# %%==============================================================================
 # 2. RF SIGNAL BANDPASS FILTERING (5 MHz Center)
 # ==============================================================================
 print("Applying 5 MHz Bandpass Filter to raw RF channel data...")
@@ -34,7 +34,7 @@ rf_filtered = np.zeros_like(rf_data)
 for tx in range(num_tx):
     rf_filtered[tx] = filtfilt(b, a, rf_data[tx], axis=-1)
 
-# ==============================================================================
+# %%==============================================================================
 # 3. PHYSICAL GRID SETUP
 # ==============================================================================
 elem_width = 4
@@ -60,7 +60,7 @@ crop_start_y = array_start_y + margin_trim * elem_width
 crop_end_y = array_start_y + (num_rx - margin_trim) * elem_width
 density_cropped = density_map[:, crop_start_y:crop_end_y]
 
-# ==============================================================================
+# %%==============================================================================
 # 4. DELAY-AND-SUM BEAMFORMER (With Correct Focused TOF & Pulse Offset)
 # ==============================================================================
 print("Performing Clean Delay-and-Sum Beamforming...")
