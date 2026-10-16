@@ -1,17 +1,29 @@
 import os
+import sys
+import warnings
 from pathlib import Path
 import h5py
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import hilbert, butter, filtfilt
+
+# Set CUDA_PATH to active Conda environment root
+if "CUDA_PATH" not in os.environ:
+    os.environ["CUDA_PATH"] = sys.prefix
+
+# Suppress cosmetic CuPy environment path warning
+warnings.filterwarnings("ignore", category=UserWarning, module="cupy._environment")
+
 import cupy as cp
+from ttictoc import tic, toc
 
 # %%==============================================================================
 # 1. LOAD DATA
 # ==============================================================================
 h5_filename = Path("sipaim_focused_ultrasound_rf.h5")
 
-print(f"Loading RF data from {h5_filename}...")
+print(f"Loading RF data from {h5_filename}...", end='')
+tic()
 with h5py.File(h5_filename, "r") as hf:
     rf_data = hf["rf_channel_data"][:]  # (256, 256, Nt)
     dt = float(hf.attrs["dt"])
@@ -26,11 +38,14 @@ f0 = 5e6  # 5 MHz center frequency
 t_0 = 1.0e-6  # 1.0 us pulse excitation offset delay
 
 Nx, Ny = density_map.shape
+elapsed = toc()
+print(f'Elapsed time: {elapsed:.2f} seconds')
 
 # %%==============================================================================
 # 2. RF SIGNAL BANDPASS FILTERING (5 MHz Center)
 # ==============================================================================
-print("Applying 5 MHz Bandpass Filter to raw RF channel data...")
+print("Applying 5 MHz Bandpass Filter to raw RF channel data...", end='')
+tic()
 b, a = butter(4, [0.4 * f0 / (fs / 2), 1.6 * f0 / (fs / 2)], btype='band')
 
 rf_filtered = np.zeros_like(rf_data)
@@ -65,11 +80,14 @@ density_cropped = density_map[:, crop_start_y:crop_end_y]
 
 # Receive apodization weights (Uniform/Boxcar)
 apod_weights = cp.ones(num_rx, dtype=cp.float32)
+elapsed = toc()
+print(f'Elapsed time: {elapsed:.2f} seconds')
 
 # %%==============================================================================
-# 4. GPU-ACCELERATED DELAY-AND-SUM (DAS) BEAMFORMING
+# 4. GPU-ACCELERATED DELAY-AND-SUM (DAS) BEAMFORMING (Linear Interpolation)
 # ==============================================================================
-print("Running GPU Delay-and-Sum Beamforming via CuPy...")
+print("Running GPU Delay-and-Sum Beamforming via CuPy...", end='')
+tic()
 
 # Transfer arrays to GPU memory
 rf_filtered_gpu = cp.asarray(rf_filtered, dtype=cp.float32)  # (num_tx, num_rx, Nt)
@@ -91,33 +109,70 @@ for tx_idx in range(num_tx):
     two_way_dist = dist_rx + dist_tx[None, :, :]
     tof = (two_way_dist / c0) + t_0
 
-    sample_indices = cp.round(tof / dt).astype(cp.int32)
-    valid_mask = (sample_indices >= 0) & (sample_indices < Nt)
+    # Sub-sample fractional indices
+    sample_frac = tof / dt
+    idx_0 = cp.floor(sample_frac).astype(cp.int32)
+    idx_1 = idx_0 + 1
+
+    # Linear interpolation weights
+    weight_1 = (sample_frac - idx_0).astype(cp.float32)
+    weight_0 = 1.0 - weight_1
+
+    # Valid mask ensuring both idx_0 and idx_1 stay within [0, Nt - 1]
+    valid_mask = (idx_0 >= 0) & (idx_1 < Nt)
 
     for rx_i in range(num_rx):
         mask = valid_mask[rx_i]
-        bmode_rf_gpu[mask] += apod_weights[rx_i] * rf_filtered_gpu[tx_idx, rx_i, sample_indices[rx_i, mask]]
+
+        # Clip indices to prevent VRAM out-of-bounds access
+        i0 = cp.clip(idx_0[rx_i, mask], 0, Nt - 1)
+        i1 = cp.clip(idx_1[rx_i, mask], 0, Nt - 1)
+
+        w0 = weight_0[rx_i, mask]
+        w1 = weight_1[rx_i, mask]
+
+        # Interpolate RF signal values directly on GPU
+        # Interpolate RF signal values directly on GPU
+        val_0 = rf_filtered_gpu[tx_idx, rx_i, i0]
+        val_1 = rf_filtered_gpu[tx_idx, rx_i, i1]
+        interp_signal = w0 * val_0 + w1 * val_1
+
+        # Accumulate into B-mode image
+        bmode_rf_gpu[mask] += apod_weights[rx_i] * interp_signal
 
 # Transfer reconstructed RF tensor back to CPU
 bmode_rf = cp.asnumpy(bmode_rf_gpu)
+elapsed = toc()
+print(f'Elapsed time: {elapsed:.2f} seconds')
 
 # %%==============================================================================
 # 5. POST-PROCESSING (TGC, Hilbert Envelope, Log Compression)
 # ==============================================================================
-print("Applying post-processing (TGC + Hilbert + Log Compression)...")
+print("Applying post-processing (TGC + Hilbert + Log Compression)...", end='')
+tic()
 
-# Time Gain Compensation (TGC)
-depth_vector = grid_x_m - rx_x_coord
 alpha_db_cm = 0.5  # Attenuation coefficient in dB/(cm*MHz)
-tgc_gain = np.exp((alpha_db_cm * (f0 / 1e6) * (depth_vector * 100)) / 8.686)[:, None]
-bmode_tgc = bmode_rf * tgc_gain
+depth_vector_gpu = grid_x_gpu[:, 0] - rx_x_coord
+tgc_gain_gpu = cp.exp((alpha_db_cm * (f0 / 1e6) * (depth_vector_gpu * 100)) / 8.686)[:, None]
+bmode_tgc_gpu = bmode_rf_gpu * tgc_gain_gpu
 
-# Envelope Extraction via Hilbert Transform
-envelope = np.abs(hilbert(bmode_tgc, axis=0))
+# 2. GPU Hilbert Transform via FFT (Fixed 2D broadcasting)
+N_depth = bmode_tgc_gpu.shape[0]
+freqs = cp.fft.fftfreq(N_depth)[:, None]  # Added [:, None] for proper column broadcasting
+h_step = cp.where(freqs > 0, 2.0, cp.where(freqs == 0, 1.0, 0.0))
 
-# Dynamic Range Log Compression (-35 dB)
-bmode_log = 20 * np.log10(envelope / np.max(envelope) + 1e-12)
-bmode_log = np.clip(bmode_log, -35, 0)
+analytic_signal_gpu = cp.fft.ifft(cp.fft.fft(bmode_tgc_gpu, axis=0) * h_step, axis=0)
+envelope_gpu = cp.abs(analytic_signal_gpu)
+
+# 3. GPU Dynamic Range Compression (-35 dB)
+bmode_log_gpu = 20 * cp.log10(envelope_gpu / cp.max(envelope_gpu) + 1e-12)
+bmode_log_gpu = cp.clip(bmode_log_gpu, -35, 0)
+
+# Final transfer to CPU for Matplotlib visualization
+bmode_log = cp.asnumpy(bmode_log_gpu)
+
+elapsed = toc()
+print(f'Elapsed time: {elapsed:.2f} seconds')
 
 # %%==============================================================================
 # 6. PLOTTING RESULTS
@@ -125,12 +180,16 @@ bmode_log = np.clip(bmode_log, -35, 0)
 depth_mm = (grid_x_m - rx_x_coord) * 1e3
 lateral_mm = grid_y_m * 1e3
 
+# Near-field clutter mask
+min_depth_mask = depth_mm >= 4.0
+bmode_log[:np.argmax(min_depth_mask), :] = -35.0
+
 fig, axes = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
 
-# Ground Truth Map
+# Ground Truth Map (Fixed extent bounds to match reconstructed depth/lateral coordinates)
 im0 = axes[0].imshow(
     density_cropped,
-    extent=[lateral_mm[0], lateral_mm[-1], (Nx - 1) * dx * 1e3, 0],
+    extent=[lateral_mm[0], lateral_mm[-1], depth_mm[-1], depth_mm[0]],
     cmap='bone',
     aspect='auto'
 )
