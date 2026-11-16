@@ -26,7 +26,7 @@ Before setting up the repository, make sure you have the following software inst
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/YOUR_USERNAME/ultrasound-sipaim-workshop.git
+git clone https://github.com/DuuMushishi/ultrasound-sipaim-workshop.git
 cd ultrasound-sipaim-workshop
 ```
 
