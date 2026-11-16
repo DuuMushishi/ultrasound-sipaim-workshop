@@ -1,3 +1,4 @@
+## Libraries
 import os
 import sys
 import warnings
@@ -17,9 +18,7 @@ warnings.filterwarnings("ignore", category=UserWarning, module="cupy._environmen
 import cupy as cp
 from ttictoc import tic, toc
 
-# %%==============================================================================
-# 1. LOAD DATA
-# ==============================================================================
+## Load simulation data
 h5_filename = Path("sipaim_focused_ultrasound_rf.h5")
 
 print(f"Loading RF data from {h5_filename}...", end='')
@@ -41,9 +40,7 @@ Nx, Ny = density_map.shape
 elapsed = toc()
 print(f'Elapsed time: {elapsed:.2f} seconds')
 
-# %%==============================================================================
-# 2. RF SIGNAL BANDPASS FILTERING (5 MHz Center)
-# ==============================================================================
+## Bandpass filtering
 print("Applying 5 MHz Bandpass Filter to raw RF channel data...", end='')
 tic()
 b, a = butter(4, [0.4 * f0 / (fs / 2), 1.6 * f0 / (fs / 2)], btype='band')
@@ -52,9 +49,7 @@ rf_filtered = np.zeros_like(rf_data)
 for tx in range(num_tx):
     rf_filtered[tx] = filtfilt(b, a, rf_data[tx], axis=-1)
 
-# %%==============================================================================
-# 3. PHYSICAL GRID SETUP
-# ==============================================================================
+## Grid setup
 elem_width = 4
 array_start_y = (Ny - (num_rx * elem_width)) // 2
 array_row = 12
@@ -83,9 +78,7 @@ apod_weights = cp.ones(num_rx, dtype=cp.float32)
 elapsed = toc()
 print(f'Elapsed time: {elapsed:.2f} seconds')
 
-# %%==============================================================================
-# 4. GPU-ACCELERATED DELAY-AND-SUM (DAS) BEAMFORMING (Linear Interpolation)
-# ==============================================================================
+## DAS beamforming with CuPy
 print("Running GPU Delay-and-Sum Beamforming via CuPy...", end='')
 tic()
 
@@ -145,9 +138,7 @@ bmode_rf = cp.asnumpy(bmode_rf_gpu)
 elapsed = toc()
 print(f'Elapsed time: {elapsed:.2f} seconds')
 
-# %%==============================================================================
-# 5. POST-PROCESSING (TGC, Hilbert Envelope, Log Compression)
-# ==============================================================================
+## Envelope detection TGC and log compression
 print("Applying post-processing (TGC + Hilbert + Log Compression)...", end='')
 tic()
 
@@ -156,7 +147,7 @@ depth_vector_gpu = grid_x_gpu[:, 0] - rx_x_coord
 tgc_gain_gpu = cp.exp((alpha_db_cm * (f0 / 1e6) * (depth_vector_gpu * 100)) / 8.686)[:, None]
 bmode_tgc_gpu = bmode_rf_gpu * tgc_gain_gpu
 
-# 2. GPU Hilbert Transform via FFT (Fixed 2D broadcasting)
+# GPU Hilbert Transform via FFT (Fixed 2D broadcasting)
 N_depth = bmode_tgc_gpu.shape[0]
 freqs = cp.fft.fftfreq(N_depth)[:, None]  # Added [:, None] for proper column broadcasting
 h_step = cp.where(freqs > 0, 2.0, cp.where(freqs == 0, 1.0, 0.0))
@@ -164,7 +155,7 @@ h_step = cp.where(freqs > 0, 2.0, cp.where(freqs == 0, 1.0, 0.0))
 analytic_signal_gpu = cp.fft.ifft(cp.fft.fft(bmode_tgc_gpu, axis=0) * h_step, axis=0)
 envelope_gpu = cp.abs(analytic_signal_gpu)
 
-# 3. GPU Dynamic Range Compression (-35 dB)
+# GPU Dynamic Range Compression (-35 dB)
 bmode_log_gpu = 20 * cp.log10(envelope_gpu / cp.max(envelope_gpu) + 1e-12)
 bmode_log_gpu = cp.clip(bmode_log_gpu, -35, 0)
 
@@ -174,9 +165,7 @@ bmode_log = cp.asnumpy(bmode_log_gpu)
 elapsed = toc()
 print(f'Elapsed time: {elapsed:.2f} seconds')
 
-# %%==============================================================================
-# 6. PLOTTING RESULTS
-# ==============================================================================
+## Plotting
 depth_mm = (grid_x_m - rx_x_coord) * 1e3
 lateral_mm = grid_y_m * 1e3
 

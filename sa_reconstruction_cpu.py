@@ -1,15 +1,15 @@
+## Libraries
 import h5py
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import hilbert, butter, filtfilt
 from scipy.ndimage import uniform_filter1d
 
-# h5_filename = "sipaim_synthetic_aperture_fmc.h5"
-
 from pathlib import Path
 import h5py
 import numpy as np
 
+## Loading data
 h5_filename = Path(__file__).resolve().parent / "sipaim_synthetic_aperture_fmc.h5"
 print(f"Loading: {h5_filename}")
 
@@ -33,7 +33,7 @@ fs = 1.0 / dt
 active_tx = np.where(np.max(np.abs(fmc_raw), axis=(1, 2)) > 0)[0]
 print(f"Active Tx elements: {len(active_tx)} / {n_tx} (range: {active_tx[0]}..{active_tx[-1]})")
 
-# 1. Bandpass filter (5 MHz)
+## Bandpass filter (5 MHz)
 b, a = butter(4, [0.4 * f0 / (fs / 2), 1.6 * f0 / (fs / 2)], btype="band")
 fmc_data = np.zeros_like(fmc_raw, dtype=np.float32)
 for tx in active_tx:
@@ -44,13 +44,13 @@ elem_y_m_raw = element_y_idx * dy
 elem_lat = elem_y_m_raw - np.mean(elem_y_m_raw)
 elem_dep = np.full_like(elem_lat, array_x_idx * dx)
 
-# 2. Mute direct wave + top-PML reflection ringdown (8 cycles)
+# Mute direct wave + top-PML reflection ringdown (8 cycles)
 t_vec = np.arange(n_samples)[None, None, :] * dt
 lat_dist_tx_rx = np.abs(elem_lat[:, None] - elem_lat[None, :])[:, :, None]
 t_direct_end = (lat_dist_tx_rx / c0) + t0 + (8.0 / f0)
 fmc_data[t_vec < t_direct_end] = 0.0
 
-# 3. Pixel grid
+# Pixel grid
 lat_grid = np.linspace(-18e-3, 18e-3, 256)
 dep_grid = np.linspace(6e-3, 26e-3, 512)
 n_dep, n_lat = len(dep_grid), len(lat_grid)
@@ -60,12 +60,12 @@ d_lat = LAT[None, :, :] - elem_lat[:, None, None]
 d_dep = DEP[None, :, :] - elem_dep[:, None, None]
 dist_one_way = np.hypot(d_lat, d_dep).astype(np.float32)
 
-# 4. Dynamic Receive/Transmit F-number Apodization (f/# = 1.5)
+# Dynamic Receive/Transmit F-number Apodization (f/# = 1.5)
 # Eliminates diagonal edge waves and fixes left-right illumination imbalance!
 f_number = 1.5
 aperture_mask = (np.abs(d_lat) <= (d_dep / (2.0 * f_number))).astype(np.float32)
 
-# 5. Low-Memory Tx-Accumulation with F-number Apodization
+# Low-Memory Tx-Accumulation with F-number Apodization
 rx_aperture_data = np.zeros((n_rx, n_dep, n_lat), dtype=np.float32)
 rx_indices = np.arange(n_rx)[:, None, None]
 
@@ -83,8 +83,8 @@ for tx in active_tx:
 # Apply receive f/# mask
 rx_aperture_data *= aperture_mask
 
-# --- A. DAS with Aperture Weight Normalization & TGC ---
-# Normalize by active element count per pixel so edges don't get darker!
+## DAS with Aperture Weight Normalization & TGC
+# Normalize by active element count per pixel so edges don't get darker
 active_weight_sum = np.sum(aperture_mask, axis=0) + 1e-6
 das_rf = np.sum(rx_aperture_data, axis=0) / active_weight_sum
 
@@ -94,7 +94,7 @@ tgc_gain = np.exp((alpha_db_cm * (f0 / 1e6) * (depth_from_array * 100)) / 8.686)
 das_env = np.abs(hilbert(das_rf * tgc_gain, axis=0))
 das_bmode = 20 * np.log10(das_env / (np.max(das_env) + 1e-12) + 1e-12)
 
-# --- B. SLSC with F-number Masked Aperture ---
+## SLSC with F-number Masked Aperture
 def compute_slsc(aperture_data, max_lag=12, kernel_z=8):
     n_rx, n_dep, n_lat = aperture_data.shape
     slsc_img = np.zeros((n_dep, n_lat), dtype=np.float32)
@@ -117,7 +117,7 @@ def compute_slsc(aperture_data, max_lag=12, kernel_z=8):
 
 slsc_image = compute_slsc(rx_aperture_data, max_lag=12, kernel_z=8)
 
-# --- Visualization ---
+## Plotting
 fig, axes = plt.subplots(1, 2, figsize=(13, 5.5))
 extent = [lat_grid[0] * 1e3, lat_grid[-1] * 1e3, dep_grid[-1] * 1e3, dep_grid[0] * 1e3]
 

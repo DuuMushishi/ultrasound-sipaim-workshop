@@ -1,12 +1,11 @@
+## Libraries
 from pathlib import Path
 import h5py
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import hilbert, windows, butter, filtfilt
 
-# %%==============================================================================
-# 1. LOAD DATA
-# ==============================================================================
+## Load simulation data
 h5_filename = Path("sipaim_focused_ultrasound_rf.h5")
 
 print(f"Loading RF data from {h5_filename}...")
@@ -24,9 +23,7 @@ f0 = 5e6  # 5 MHz center frequency
 
 Nx, Ny = density_map.shape
 
-# %%==============================================================================
-# 2. RF SIGNAL BANDPASS FILTERING (5 MHz Center)
-# ==============================================================================
+## Bandpass filtering
 print("Applying 5 MHz Bandpass Filter to raw RF channel data...")
 b, a = butter(4, [0.4 * f0 / (fs / 2), 1.6 * f0 / (fs / 2)], btype='band')
 
@@ -34,9 +31,7 @@ rf_filtered = np.zeros_like(rf_data)
 for tx in range(num_tx):
     rf_filtered[tx] = filtfilt(b, a, rf_data[tx], axis=-1)
 
-# %%==============================================================================
-# 3. PHYSICAL GRID SETUP
-# ==============================================================================
+## Grid setup
 elem_width = 4
 array_start_y = (Ny - (num_rx * elem_width)) // 2
 array_row = 12
@@ -60,10 +55,8 @@ crop_start_y = array_start_y + margin_trim * elem_width
 crop_end_y = array_start_y + (num_rx - margin_trim) * elem_width
 density_cropped = density_map[:, crop_start_y:crop_end_y]
 
-# %%==============================================================================
-# 4. DELAY-AND-SUM BEAMFORMER (With Correct Focused TOF & Pulse Offset)
-# ==============================================================================
-print("Performing Clean Delay-and-Sum Beamforming...")
+## Delay and Sum (DAS) beamformer
+print("Performing Delay-and-Sum Beamforming...")
 
 bmode_rf = np.zeros(GRID_X.shape, dtype=np.float32)
 
@@ -98,9 +91,7 @@ depth_vector_m = grid_x_m - rx_x_coord
 tgc_gain = np.exp(20.0 * depth_vector_m)[:, np.newaxis]
 bmode_rf *= tgc_gain
 
-# ==============================================================================
-# 5. ENVELOPE DETECTION & DISPLAY SCALING
-# ==============================================================================
+## Envelope detection and display scaling
 print("Applying Hilbert Envelope Detection and Log Compression...")
 
 analytic_signal = hilbert(bmode_rf, axis=0)
@@ -115,7 +106,7 @@ envelope_norm = envelope / max_val
 bmode_dB = 20 * np.log10(envelope_norm + 1e-6)
 bmode_dB = np.clip(bmode_dB, -35, 0)
 
-# Display Subplots
+## Plotting
 fig, axes = plt.subplots(2, 1, figsize=(10, 8))
 
 # Ground Truth Phantom

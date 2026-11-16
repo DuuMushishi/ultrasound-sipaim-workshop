@@ -1,3 +1,4 @@
+## Libraries
 import os
 import sys
 import ctypes
@@ -16,13 +17,14 @@ warnings.filterwarnings("ignore", category=UserWarning, module="cupy._environmen
 
 import cupy as cp
 
+# Set data and dll path
 script_dir = Path(__file__).resolve().parent
 dll_path = script_dir / "sa_beamformer.dll"
 h5_path = script_dir / "sipaim_synthetic_aperture_fmc.h5"
 
 cuda_lib = ctypes.CDLL(str(dll_path))
 
-# --- 1. Load Synthetic Aperture FMC Dataset ---
+## Load dataset
 print("Loading k-Wave Synthetic Aperture FMC dataset... ", end="")
 tic()
 with h5py.File(h5_path, "r") as hf:
@@ -40,7 +42,7 @@ print(f"{toc():.2f} s")
 n_tx, n_rx, n_samples = fmc_raw.shape
 fs = 1.0 / dt
 
-# --- 2. Setup Grids, Filter Coefficients & GPU Buffers ---
+## Setup Grids, Filter Coefficients & GPU Buffer
 print("Setting up GPU buffers... ", end="")
 tic()
 
@@ -72,7 +74,7 @@ slsc_gpu = cp.zeros((n_dep, n_lat), dtype=cp.float32)
 
 print(f"{toc():.2f} s")
 
-# --- 3. Declare ctypes Signatures ---
+## Declare ctypes Signatures
 cuda_lib.launch_biquad_filtfilt.argtypes = [
     ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
     ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int
@@ -96,7 +98,7 @@ cuda_lib.launch_slsc_coherence.argtypes = [
     ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int
 ]
 
-# --- 4. Execute All Four CUDA Kernels ---
+## Run all CUDA kernels
 f_number = 1.5
 max_lag = 12
 kernel_z = 8
@@ -147,7 +149,7 @@ cuda_lib.launch_slsc_coherence(
 cp.cuda.Device().synchronize()
 print(f"{toc():.4f} s")
 
-# --- 5. Transfer Results & Post-Process DAS Envelope ---
+## Transfer Results & Post-Process DAS Envelope
 das_rf = cp.asnumpy(das_rf_gpu)
 slsc_image = cp.asnumpy(slsc_gpu)
 
@@ -158,7 +160,7 @@ tgc_gain = np.exp((alpha_db_cm * (f0 / 1e6) * (depth_from_array * 100.0)) / 8.68
 das_env = np.abs(hilbert(das_rf * tgc_gain, axis=0))
 das_bmode = 20.0 * np.log10(das_env / (np.max(das_env) + 1e-12) + 1e-12)
 
-# --- 6. Visualization ---
+## Plotting
 fig, axes = plt.subplots(1, 2, figsize=(13, 5.5))
 extent = [lat_grid[0] * 1e3, lat_grid[-1] * 1e3, dep_grid[-1] * 1e3, dep_grid[0] * 1e3]
 
