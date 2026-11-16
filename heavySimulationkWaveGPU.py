@@ -26,7 +26,7 @@ from kwave.options.simulation_execution_options import SimulationExecutionOption
 
 plt.close('all')
 
-# %%==============================================================================
+## %%==============================================================================
 # 1. GRID & TRANSDUCER ARRAY GEOMETRY CONFIGURATION
 # ==============================================================================
 Nx, Ny = 1024, 2048
@@ -45,7 +45,7 @@ elem_width = 4
 array_start_y = (Ny - (num_elements * elem_width)) // 2
 array_row = 12
 
-# %%==============================================================================
+## %%==============================================================================
 # 2. IMAGE PHANTOM GENERATOR (Speckle-Based Scatterer Map)
 # ==============================================================================
 image_path = "SIPAIM_2026_logo_blanco_small.png"
@@ -97,7 +97,7 @@ medium = kWaveMedium(
     alpha_power=1.5
 )
 
-# ==============================================================================
+## ==============================================================================
 # VISUALIZATION
 # ==============================================================================
 fig, axes = plt.subplots(1, 3, figsize=(18, 5))
@@ -108,20 +108,21 @@ axes[0].set_xlabel("Y Grid Units")
 axes[0].set_ylabel("X Depth Grid Units")
 fig.colorbar(im0, ax=axes[0], label="Binary Mask")
 
-im1 = axes[1].imshow(density_map, cmap="bone", aspect="auto")
-axes[1].set_title("Density Map (kg/m³)")
-axes[1].set_xlabel("Y Grid Units")
-fig.colorbar(im1, ax=axes[1], label="Density")
 
-im2 = axes[2].imshow(sound_speed_map, cmap="bone", aspect="auto")
-axes[2].set_title("Sound Speed Map (m/s)")
+im1 = axes[1].imshow(density_map, cmap="jet", aspect="auto", vmin = 980, vmax = 1020)
+axes[1].set_title("Density Map")
+axes[1].set_xlabel("Y Grid Units")
+fig.colorbar(im1, ax=axes[1], label="Density (kg/m³)")
+
+im2 = axes[2].imshow(sound_speed_map, cmap="jet", aspect="auto")
+axes[2].set_title("Sound Speed Map")
 axes[2].set_xlabel("Y Grid Units")
 fig.colorbar(im2, ax=axes[2], label="Speed (m/s)")
 
 plt.tight_layout()
 plt.show()
 
-# %%==============================================================================
+## ==============================================================================
 # 3. TRANSDUCER MASK SETUP
 # ==============================================================================
 sensor_mask = np.zeros((Nx, Ny), dtype=bool)
@@ -132,7 +133,7 @@ sensor.mask = sensor_mask
 
 element_y_coords = np.where(sensor_mask[array_row, :])[0]
 
-# %%==============================================================================
+## ==============================================================================
 # 4. FOCUSED ULTRASOUND SCANNING SEQUENCE
 # ==============================================================================
 active_elements = 32
