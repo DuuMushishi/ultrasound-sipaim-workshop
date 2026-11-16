@@ -1,3 +1,4 @@
+## Libraries
 import os
 import sys
 import subprocess
@@ -17,16 +18,14 @@ from kwave.kspaceFirstOrder2D import kspaceFirstOrder2D
 from kwave.options.simulation_options import SimulationOptions
 from kwave.options.simulation_execution_options import SimulationExecutionOptions
 
-# ==============================================================================
-# 1. GRID & TRANSDUCER ARRAY GEOMETRY CONFIGURATION
-# ==============================================================================
+## Grid configuration
 Nx, Ny = 1024, 1280  # 1024 active array points + 128 padding per side (~4.1 cm x 5.12 cm)
 dx = dy = 4e-5       # 40 um spatial step
 kgrid = kWaveGrid([Nx, Ny], [dx, dy])
 
 f0 = 5e6             # 5 MHz center frequency
 dt = 10e-9           # 100 MHz sampling (CFL = 0.375, stable for power-law absorption)
-Nt = 5500            # 55 us total window
+Nt = 5500            # 110 us total window
 kgrid.setTime(Nt, dt)
 t = kgrid.t_array.flatten()
 
@@ -36,9 +35,7 @@ elem_width = 4
 array_start_y = (Ny - (num_elements * elem_width)) // 2
 array_row = 12
 
-# ==============================================================================
-# 2. IMAGE PHANTOM GENERATOR (Speckle-Based Scatterer Map)
-# ==============================================================================
+## Image phantom generator, modifying sound speed map and density map
 script_dir = Path(__file__).resolve().parent
 image_path = script_dir / "SIPAIM_2026_logo_blanco_small.png"
 c_bg, rho_bg = 1500.0, 1000.0  # Homogeneous sound speed
@@ -75,11 +72,11 @@ else:
 np.random.seed(42)
 density_map = np.full((Nx, Ny), rho_bg, dtype=np.float32)
 
-# Background tissue speckle (low amplitude random noise)
+# Background tissue speckle
 bg_scatter = np.random.normal(0, 2.0, size=(Nx, Ny))
 density_map += bg_scatter
 
-# Hyperechoic logo speckle (zero-mean noise prevents phase distortion/shadowing)
+# Hyperechoic logo speckle with zero-mean noise
 logo_scatter = np.random.normal(0, 15.0, size=(Nx, Ny))
 density_map[padded_mask] += logo_scatter[padded_mask]
 
@@ -93,9 +90,7 @@ medium = kWaveMedium(
     alpha_power=1.5
 )
 
-# ==============================================================================
-# 3. TRANSDUCER MASK SETUP
-# ==============================================================================
+## Transducer mask setup
 sensor_mask = np.zeros((Nx, Ny), dtype=bool)
 sensor_mask[array_row, array_start_y: array_start_y + num_elements * elem_width: elem_width] = True
 
@@ -104,9 +99,7 @@ sensor.mask = sensor_mask
 
 element_y_coords = np.where(sensor_mask[array_row, :])[0]
 
-# ==============================================================================
-# 4. SYNTHETIC APERTURE (FULL MATRIX CAPTURE) SCANNING SEQUENCE (WITH RESUME)
-# ==============================================================================
+## Synthetic Aperture (Full matrix capture) scanning sequence
 h5_filename = script_dir / "sipaim_synthetic_aperture_fmc.h5"
 
 # Pre-compute single-element excitation pulse (t0 = 1.0 us offset)
@@ -156,7 +149,7 @@ exec_options = SimulationExecutionOptions()
 exec_options.is_gpu_simulation = True
 exec_options.show_sim_log = False
 
-BATCH_SIZE = 4  # Fresh Python process every 4 Tx avoids k-wave-python's 4-call state limit
+BATCH_SIZE = 4  # Workaround, TODO, avoid this: Python process every 4 Tx avoids k-wave-python's 4-call state limit
 
 if len(pending_tx) > 0:
     batch = pending_tx[:BATCH_SIZE]

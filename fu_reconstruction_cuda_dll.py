@@ -1,4 +1,4 @@
-##
+## Libraries
 import os
 import sys
 import ctypes
@@ -22,10 +22,9 @@ import cupy as cp
 dll_path = "./das_kernel.dll"
 cuda_lib = ctypes.CDLL(dll_path)
 
+## Load HDF5 data
 print("Loading k-Wave simulation results ", end = '')
 tic()
-
-# Load HDF5 data
 with h5py.File("sipaim_focused_ultrasound_rf.h5", "r") as f:
     rf_raw = np.array(f["rf_channel_data"], dtype=np.float32)  # [num_tx, num_rx, Nt]
     density_map = f["density_map"][:]
@@ -36,7 +35,6 @@ elapsed = toc()
 print(f'Elapsed time: {elapsed:.2f} seconds')
 
 ## Setting up environment for CUDA kernel runs
-
 print("Setting up environment for CUDA kernel runs...", end = '')
 tic()
 
@@ -84,7 +82,6 @@ elapsed = toc()
 print(f'Elapsed time: {elapsed:.2f} seconds')
 
 ## Running all CUDA kernels
-
 print("Running all CUDA kernels...", end = '')
 tic()
 
@@ -159,7 +156,8 @@ bmode_image = np.clip(bmode_image, -35, 0)
 min_depth_mask = depth_mm >= 4.0
 bmode_image[:np.argmax(min_depth_mask), :] = -35.0
 
-## 8. Plot reconstructed phantom
+## Plot reconstructed phantom
+
 plt.figure()
 plt.imshow(
     bmode_image,

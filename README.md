@@ -50,11 +50,11 @@ python heavySimulationkWaveGPU.py
 Performs Delay-and-Sum beamforming on CPU:
 
 ```bash
-python reconstruct_bmode.py
+python fu_reconstruction_cpu.py
 ```
 ### 3. GPU-Accelerated Reconstruction
 Runs real-time beamforming using GPU matrix operations/CUDA kernels:
 
 ```bash
-python reconstruct_bmode_gpu.py
+python fu_reconstruction_gpu.py
 ```
