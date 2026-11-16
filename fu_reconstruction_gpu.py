@@ -173,33 +173,20 @@ lateral_mm = grid_y_m * 1e3
 min_depth_mask = depth_mm >= 4.0
 bmode_log[:np.argmax(min_depth_mask), :] = -35.0
 
-fig, axes = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
-
-# Ground Truth Map (Fixed extent bounds to match reconstructed depth/lateral coordinates)
-im0 = axes[0].imshow(
-    density_cropped,
-    extent=[lateral_mm[0], lateral_mm[-1], depth_mm[-1], depth_mm[0]],
-    cmap='bone',
-    aspect='auto'
-)
-axes[0].set_title("Ground Truth Phantom Map")
-axes[0].set_ylabel("Depth (mm)")
-
-# Reconstructed B-Mode Image
-im1 = axes[1].imshow(
+plt.figure()
+plt.imshow(
     bmode_log,
+    cmap="bone",
     extent=[lateral_mm[0], lateral_mm[-1], depth_mm[-1], depth_mm[0]],
-    cmap='gray',
-    aspect='auto',
-    vmin=-35,
+    aspect="auto",
+    vmin=-40,
     vmax=0
 )
-axes[1].set_title("GPU-Accelerated B-Mode Image (Filtered RF + Uniform Sound Speed)")
-axes[1].set_xlabel("Lateral Position (mm)")
-axes[1].set_ylabel("Depth (mm)")
-
-cbar = fig.colorbar(im1, ax=axes[1], orientation='vertical')
-cbar.set_label('Dynamic Range (dB)')
-
+plt.title("B-Mode CuPy DAS")
+plt.xlabel("Width [mm]")
+plt.ylabel("Depth [mm]")
+plt.colorbar(label="Dynamic Range [dB]")
 plt.tight_layout()
+plt.axis("image")
+plt.ylim([25, 0])
 plt.show()
