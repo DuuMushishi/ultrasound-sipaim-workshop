@@ -4,10 +4,12 @@ import h5py
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import hilbert, windows, butter, filtfilt
+from ttictoc import tic, toc
+
 
 ## Load simulation data
-h5_filename = Path("sipaim_focused_ultrasound_rf.h5")
-
+h5_filename = Path("sipaim_focused_ultrasound_rf.h5", end = '')
+tic()
 print(f"Loading RF data from {h5_filename}...")
 with h5py.File(h5_filename, "r") as hf:
     rf_data = hf["rf_channel_data"][:]  # (256, 256, Nt)
@@ -22,15 +24,18 @@ fs = 1.0 / dt
 f0 = 5e6  # 5 MHz center frequency
 
 Nx, Ny = density_map.shape
-
+elapsed = toc()
+print(f'Elapsed time: {elapsed:.2f} seconds')
 ## Bandpass filtering
-print("Applying 5 MHz Bandpass Filter to raw RF channel data...")
+print("Applying 5 MHz Bandpass Filter to raw RF channel data...", end = '')
+tic()
 b, a = butter(4, [0.4 * f0 / (fs / 2), 1.6 * f0 / (fs / 2)], btype='band')
 
 rf_filtered = np.zeros_like(rf_data)
 for tx in range(num_tx):
     rf_filtered[tx] = filtfilt(b, a, rf_data[tx], axis=-1)
-
+elapsed = toc()
+print(f'Elapsed time: {elapsed:.2f} seconds')
 ## Grid setup
 elem_width = 4
 array_start_y = (Ny - (num_rx * elem_width)) // 2
@@ -56,8 +61,8 @@ crop_end_y = array_start_y + (num_rx - margin_trim) * elem_width
 density_cropped = density_map[:, crop_start_y:crop_end_y]
 
 ## Delay and Sum (DAS) beamformer
-print("Performing Delay-and-Sum Beamforming...")
-
+print("Performing Delay-and-Sum Beamforming...", end = '')
+tic()
 bmode_rf = np.zeros(GRID_X.shape, dtype=np.float32)
 
 # Precompute receive distances from all hydrophones to pixel grid
@@ -105,7 +110,8 @@ max_val = np.max(envelope[min_depth_idx:, :])
 envelope_norm = envelope / max_val
 bmode_dB = 20 * np.log10(envelope_norm + 1e-6)
 bmode_dB = np.clip(bmode_dB, -35, 0)
-
+elapsed = toc()
+print(f'Elapsed time: {elapsed:.2f} seconds')
 ## Plotting
 fig, axes = plt.subplots(2, 1, figsize=(10, 8))
 
